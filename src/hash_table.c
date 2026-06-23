@@ -87,14 +87,19 @@ void* hash_table_delete(hash_table* table, const char* key) {
     size_t index = (size_t)(hash & (uint64_t)(table->capacity - 1));
     size_t start_index = index;
 
+    // Ищем ключ, пока не встретим пустую ячейку
     while (table->entries[index].key != NULL) {
         if (table->entries[index].key != HT_DELETED &&
             strcmp(key, table->entries[index].key) == 0) {
 
+            // Сохраняем значение, чтобы вернуть его после удаления
             void* value = table->entries[index].value;
 
+
+            // Освобождаем память, выделенную под ключ
             free((void*)table->entries[index].key);
 
+            // Помечаем ячейку как удалённую
             table->entries[index].key = HT_DELETED;
             table->entries[index].value = NULL;
 
@@ -131,6 +136,7 @@ void* hash_table_set(hash_table* table, const char * key, void * value) {
     return ht_set_entry(table->entries, table->capacity, key, value, &table->length);
 }
 
+// Вычисляет хеш строки по алгоритму FNV-1a
 static  uint64_t hash_func(const char * key) {
     uint64_t hash = FNV_OFFSET;
     for (const char * ptr = key; *ptr; ptr++) {
@@ -140,7 +146,7 @@ static  uint64_t hash_func(const char * key) {
     return hash;
 }
 
-
+// Вставляет новую пару ключ-значение или обновляет значение существующего ключа
 static const char* ht_set_entry(entry* entries, size_t capacity,
         const char* key, void* value, size_t* plength) {
 
@@ -174,6 +180,7 @@ static const char* ht_set_entry(entry* entries, size_t capacity,
         index = first_deleted;
     }
 
+    // При обычной вставке копируем ключ и увеличиваем длину таблицы
     if (plength != NULL) {
         key = strdup(key);
         if (key == NULL) {

@@ -41,12 +41,14 @@ bool hash_multiset_add(hash_multiset* multiset, const char* key) {
 
     size_t* count = hash_table_get(multiset->table, key);
 
+    // Если элемент уже есть, увеличиваем его счётчик
     if (count != NULL) {
         (*count)++;
         multiset->total_count++;
         return true;
     }
 
+    // Если элемента нет, создаём новый счётчик
     count = malloc(sizeof(size_t));
     if (count == NULL) {
         return false;
