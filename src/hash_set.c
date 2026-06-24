@@ -1,9 +1,12 @@
 #include "headers/hash_set.h"
 
+/*
+ * Hash set построен поверх hash_table.
+ * В таблице хранится только key, а value всегда указывает на один dummy-байт.
+ */
+
 static char HASH_SET_PRESENT_VALUE = 1;
 #define HASH_SET_PRESENT (&HASH_SET_PRESENT_VALUE)
-
-
 
 
 
@@ -35,6 +38,8 @@ bool hash_set_add(hash_set* set, const char* key) {
     if (set == NULL || key == NULL) {
         return false;
     }
+
+    // hash_table_set обновил бы value, но set не должен принимать дубликаты.
     if (hash_set_contains(set, key)) {
         return false;
     }

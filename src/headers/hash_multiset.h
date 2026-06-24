@@ -4,8 +4,13 @@
 
 #include "hash_table.h"
 
+/*
+ * Multiset: один уникальный key может встречаться много раз.
+ * unique_size берется из hash_table, total_size хранится отдельно.
+ */
 
 typedef struct hash_multiset {
+    // table хранит key -> size_t*, total_count хранит сумму всех счетчиков.
     hash_table* table;
     size_t total_count;
 } hash_multiset;

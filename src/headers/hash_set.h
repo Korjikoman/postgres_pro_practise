@@ -2,6 +2,10 @@
 #define UNTITLED_HASH_SET_H
 #include "hash_table.h"
 
+/*
+ * Простое множество строк.
+ * Внутри используется hash_table, где наличие ключа означает наличие элемента.
+ */
 
 typedef struct hash_set {
     hash_table* table;

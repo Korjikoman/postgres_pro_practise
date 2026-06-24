@@ -3,6 +3,7 @@
 
 #include "hash_multiset.h"
 #include "hash_set.h"
+#include "lock_free_hash_table.h"
 
 int* make_int(int value);
 void free_hash_table_values(hash_table* table);
@@ -25,6 +26,12 @@ void test_hash_multiset_remove_one(void);
 void test_hash_multiset_remove_all(void);
 void test_hash_multiset_remove_missing(void);
 void test_hash_multiset_iterator(void);
+
+void test_lock_free_hash_table_create(void);
+void test_lock_free_hash_table_set_get_update(void);
+void test_lock_free_hash_table_update_when_full(void);
+void test_lock_free_hash_table_delete_and_reactivate(void);
+void test_lock_free_hash_table_deleted_slot_keeps_key(void);
 
 void run_tests(void);
 

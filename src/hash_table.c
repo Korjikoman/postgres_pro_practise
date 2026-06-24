@@ -1,7 +1,18 @@
 #include "headers/hash_table.h"
 
+/*
+ * Базовая хеш-таблица проекта.
+ *
+ * Коллизии решаются открытой адресацией и linear probing:
+ * если слот занят чужим ключом, идем в следующий слот массива.
+ *
+ * Владение памятью:
+ * - таблица копирует и освобождает key;
+ * - value принадлежит вызывающему коду, поэтому destroy его не освобождает.
+ */
 
 static const char HT_DELETED_MARKER = '\0';
+// Tombstone: слот удален, но probing через него должен продолжаться.
 #define HT_DELETED (&HT_DELETED_MARKER)
 #define INITIAL_CAPACITY 16
 #define FNV_OFFSET 14695981039346656037UL
@@ -24,6 +35,7 @@ hash_table * hash_table_create(void) {
 }
 
 void hash_table_destroy(hash_table* table) {
+    // Освобождаем только ключи: значения могут быть любыми внешними объектами.
     for (size_t i = 0; i < table->capacity; i++) {
         if (table->entries[i].key != NULL &&
             table->entries[i].key != HT_DELETED) {
@@ -40,6 +52,7 @@ void hash_table_destroy(hash_table* table) {
 bool hash_table_next(hti* it) {
     hash_table* table = it->hash_table;
 
+    // Итератор пропускает пустые и удаленные слоты.
     while (it->index < table->capacity) {
         size_t i = it->index;
         it->index++;
@@ -62,6 +75,7 @@ void* hash_table_get(hash_table* table, const char* key) {
     size_t index = (size_t)(hash & (uint64_t)(table->capacity - 1));
     size_t start_index = index;
 
+    // NULL заканчивает цепочку поиска, HT_DELETED просто пропускаем.
     while (table->entries[index].key != NULL) {
         if (table->entries[index].key != HT_DELETED &&
             strcmp(key, table->entries[index].key) == 0) {
@@ -87,19 +101,15 @@ void* hash_table_delete(hash_table* table, const char* key) {
     size_t index = (size_t)(hash & (uint64_t)(table->capacity - 1));
     size_t start_index = index;
 
-    // Ищем ключ, пока не встретим пустую ячейку
+    // Удаление оставляет tombstone, иначе сломается цепочка probing.
     while (table->entries[index].key != NULL) {
         if (table->entries[index].key != HT_DELETED &&
             strcmp(key, table->entries[index].key) == 0) {
 
-            // Сохраняем значение, чтобы вернуть его после удаления
             void* value = table->entries[index].value;
 
-
-            // Освобождаем память, выделенную под ключ
             free((void*)table->entries[index].key);
 
-            // Помечаем ячейку как удалённую
             table->entries[index].key = HT_DELETED;
             table->entries[index].value = NULL;
 
@@ -128,6 +138,7 @@ void* hash_table_set(hash_table* table, const char * key, void * value) {
         return NULL;
     }
 
+
     if (table->length >= table->capacity / 2) {
         if (!ht_expand(table)) {
             return NULL;
@@ -136,7 +147,7 @@ void* hash_table_set(hash_table* table, const char * key, void * value) {
     return ht_set_entry(table->entries, table->capacity, key, value, &table->length);
 }
 
-// Вычисляет хеш строки по алгоритму FNV-1a
+// FNV-1a: простой стабильный хеш для строковых ключей.
 static  uint64_t hash_func(const char * key) {
     uint64_t hash = FNV_OFFSET;
     for (const char * ptr = key; *ptr; ptr++) {
@@ -146,7 +157,11 @@ static  uint64_t hash_func(const char * key) {
     return hash;
 }
 
-// Вставляет новую пару ключ-значение или обновляет значение существующего ключа
+/*
+ * Общая вставка для обычного set и для переноса при expand.
+ * plength != NULL: новый ключ копируется через strdup, length растет.
+ * plength == NULL: переносим уже скопированный key без изменения length.
+ */
 static const char* ht_set_entry(entry* entries, size_t capacity,
         const char* key, void* value, size_t* plength) {
 
@@ -156,6 +171,7 @@ static const char* ht_set_entry(entry* entries, size_t capacity,
 
     size_t first_deleted = SIZE_MAX;
 
+    // Tombstone можно переиспользовать, но сначала надо убедиться, что key нет дальше.
     while (entries[index].key != NULL) {
         if (entries[index].key == HT_DELETED) {
             if (first_deleted == SIZE_MAX) {
@@ -230,4 +246,3 @@ hti ht_iterator(hash_table* table) {
     it.index = 0;
     return it;
 }
-

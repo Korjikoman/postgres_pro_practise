@@ -6,6 +6,8 @@ set(CMAKE_C_STANDARD 11)
 add_executable(untitled src/main.c
         src/hash_multiset.c
         src/headers/hash_multiset.h
+        src/lock_free_hash_table.c
+        src/headers/lock_free_hash_table.h
         src/hash_table.c
         src/headers/hash_table.h
         src/hash_set.c

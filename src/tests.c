@@ -1,10 +1,7 @@
 #include "headers/tests.h"
 
 
-
-
 // тесты для hash table
-
 int* make_int(int value) {
     int* p = malloc(sizeof(int));
     assert(p != NULL);
@@ -16,6 +13,7 @@ int* make_int(int value) {
 void free_hash_table_values(hash_table* table) {
     hti it = ht_iterator(table);
 
+    // Базовая таблица не владеет value, поэтому тесты освобождают их вручную.
     while (hash_table_next(&it)) {
         free(it.value);
     }
@@ -150,6 +148,7 @@ void test_delete_and_insert_again(void) {
 void test_expand_table(void) {
     hash_table* table = hash_table_create();
 
+    // 100 элементов заставляют таблицу несколько раз расшириться.
     for (int i = 0; i < 100; i++) {
         char key[32];
         snprintf(key, sizeof(key), "key_%d", i);
@@ -221,6 +220,7 @@ void test_hash_set_no_duplicates(void) {
 
     assert(set != NULL);
 
+    // Set должен оставить один ключ, даже если add вызвать несколько раз.
     assert(hash_set_add(set, "cat") == true);
     assert(hash_set_add(set, "cat") == false);
     assert(hash_set_add(set, "cat") == false);
@@ -371,6 +371,7 @@ void test_hash_multiset_iterator(void) {
     size_t unique_count = 0;
     size_t total_count = 0;
 
+    // Итератор идет по уникальным ключам, а total_count собираем из счетчиков.
     hti it = hash_multiset_iterator(multiset);
 
     while (hash_multiset_next(&it)) {
@@ -387,6 +388,118 @@ void test_hash_multiset_iterator(void) {
     assert(total_count == 6);
 
     hash_multiset_destroy(multiset);
+}
+
+// lock-free hash table tests
+
+void test_lock_free_hash_table_create(void) {
+    lock_free_hash_table* table = lf_hash_table_create(4);
+
+    assert(table != NULL);
+    assert(lf_hash_table_capacity(table) == 4);
+    assert(lf_hash_table_length(table) == 0);
+    assert(lf_hash_table_get(table, "missing") == NULL);
+
+    lf_hash_table_destroy(table);
+
+    assert(lf_hash_table_create(0) == NULL);
+}
+
+void test_lock_free_hash_table_set_get_update(void) {
+    lock_free_hash_table* table = lf_hash_table_create(8);
+
+    assert(table != NULL);
+
+    int first = 10;
+    int second = 20;
+
+    assert(lf_hash_table_set(table, "key", &first) == true);
+    assert(lf_hash_table_length(table) == 1);
+    assert(lf_hash_table_get(table, "key") == &first);
+
+    assert(lf_hash_table_set(table, "key", &second) == true);
+    assert(lf_hash_table_length(table) == 1);
+    assert(lf_hash_table_get(table, "key") == &second);
+
+    assert(lf_hash_table_set(table, "null_value", NULL) == false);
+    assert(lf_hash_table_length(table) == 1);
+
+    lf_hash_table_destroy(table);
+}
+
+void test_lock_free_hash_table_update_when_full(void) {
+    lock_free_hash_table* table = lf_hash_table_create(2);
+
+    assert(table != NULL);
+
+    int one = 1;
+    int two = 2;
+    int three = 3;
+    int updated_two = 200;
+
+    assert(lf_hash_table_set(table, "one", &one) == true);
+    assert(lf_hash_table_set(table, "two", &two) == true);
+    assert(lf_hash_table_length(table) == 2);
+
+    assert(lf_hash_table_set(table, "three", &three) == false);
+    assert(lf_hash_table_length(table) == 2);
+
+    // Главная проверка: полная таблица не мешает обновить уже существующий ключ.
+    assert(lf_hash_table_set(table, "two", &updated_two) == true);
+    assert(lf_hash_table_length(table) == 2);
+    assert(lf_hash_table_get(table, "two") == &updated_two);
+
+    lf_hash_table_destroy(table);
+}
+
+void test_lock_free_hash_table_delete_and_reactivate(void) {
+    lock_free_hash_table* table = lf_hash_table_create(4);
+
+    assert(table != NULL);
+
+    int old_value = 5;
+    int new_value = 50;
+
+    assert(lf_hash_table_set(table, "x", &old_value) == true);
+    assert(lf_hash_table_length(table) == 1);
+
+    assert(lf_hash_table_delete(table, "x") == &old_value);
+    assert(lf_hash_table_length(table) == 0);
+    assert(lf_hash_table_get(table, "x") == NULL);
+
+    assert(lf_hash_table_delete(table, "x") == NULL);
+    assert(lf_hash_table_length(table) == 0);
+
+    assert(lf_hash_table_set(table, "x", &new_value) == true);
+    assert(lf_hash_table_length(table) == 1);
+    assert(lf_hash_table_get(table, "x") == &new_value);
+
+    lf_hash_table_destroy(table);
+}
+
+void test_lock_free_hash_table_deleted_slot_keeps_key(void) {
+    lock_free_hash_table* table = lf_hash_table_create(1);
+
+    assert(table != NULL);
+
+    int old_value = 1;
+    int other_value = 2;
+    int revived_value = 3;
+
+    assert(lf_hash_table_set(table, "same", &old_value) == true);
+    assert(lf_hash_table_delete(table, "same") == &old_value);
+    assert(lf_hash_table_length(table) == 0);
+
+    // Удаленный key остается в слоте, поэтому другой key сюда не вставится.
+    assert(lf_hash_table_set(table, "other", &other_value) == false);
+    assert(lf_hash_table_length(table) == 0);
+
+    // Но тот же ключ можно снова сделать активным.
+    assert(lf_hash_table_set(table, "same", &revived_value) == true);
+    assert(lf_hash_table_get(table, "same") == &revived_value);
+    assert(lf_hash_table_length(table) == 1);
+
+    lf_hash_table_destroy(table);
 }
 
 
@@ -411,4 +524,10 @@ void run_tests(void) {
     test_hash_multiset_remove_all();
     test_hash_multiset_remove_missing();
     test_hash_multiset_iterator();
+
+    test_lock_free_hash_table_create();
+    test_lock_free_hash_table_set_get_update();
+    test_lock_free_hash_table_update_when_full();
+    test_lock_free_hash_table_delete_and_reactivate();
+    test_lock_free_hash_table_deleted_slot_keeps_key();
 }

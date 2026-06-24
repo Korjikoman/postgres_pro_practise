@@ -8,8 +8,8 @@
 #include "headers/hash_multiset.h"
 #include "headers/hash_set.h"
 #include "headers/hash_table.h"
+#include "headers/lock_free_hash_table.h"
 #include "headers/tests.h"
-
 
 void exit_nomem(void) {
     fprintf(stderr, "out of memory\n");
@@ -21,6 +21,7 @@ int main(void) {
 
     printf("DEMO 1: HASH TABLE\n");
 
+    // Обычная таблица копирует ключи, но int* значения освобождаем сами.
     hash_table* table = hash_table_create();
     if (table == NULL) {
         exit_nomem();
@@ -94,6 +95,7 @@ int main(void) {
 
     printf("\nDEMO 2: HASH SET\n");
 
+    // Set хранит только уникальные строки; повторные add не меняют размер.
     hash_set* set = hash_set_create();
     if (set == NULL) {
         exit_nomem();
@@ -138,6 +140,7 @@ int main(void) {
 
     printf("\nDEMO 3: HASH MULTISET\n");
 
+    // unique_size и total_size могут отличаться.
     hash_multiset* multiset = hash_multiset_create();
     if (multiset == NULL) {
         exit_nomem();
@@ -195,6 +198,77 @@ int main(void) {
     printf("Total elements: %zu\n", hash_multiset_total_size(multiset));
 
     hash_multiset_destroy(multiset);
+
+    printf("\nDEMO 4: LOCK-FREE HASH TABLE\n");
+
+    // Lock-free таблица фиксированного размера, новый key может не поместиться.
+    lock_free_hash_table* lf_table = lf_hash_table_create(2);
+    if (lf_table == NULL) {
+        exit_nomem();
+    }
+
+    int* lf_workers = make_int(4);
+    int* lf_jobs = make_int(128);
+    int* lf_extra = make_int(999);
+
+    if (!lf_hash_table_set(lf_table, "workers", lf_workers)) {
+        exit_nomem();
+    }
+
+    if (!lf_hash_table_set(lf_table, "jobs", lf_jobs)) {
+        exit_nomem();
+    }
+
+    printf("After insert: length=%zu, capacity=%zu\n",
+           lf_hash_table_length(lf_table),
+           lf_hash_table_capacity(lf_table));
+
+    if (!lf_hash_table_set(lf_table, "extra", lf_extra)) {
+        printf("Cannot insert extra: fixed-capacity table is full\n");
+        free(lf_extra);
+    }
+
+    int* new_workers = make_int(8);
+
+    // Update существующего key должен работать даже когда таблица уже полная.
+    if (!lf_hash_table_set(lf_table, "workers", new_workers)) {
+        free(new_workers);
+        exit_nomem();
+    }
+
+    free(lf_workers);
+    lf_workers = new_workers;
+
+    printf("Updated workers while table is full: %d\n",
+           *(int*)lf_hash_table_get(lf_table, "workers"));
+
+    int* deleted_jobs = lf_hash_table_delete(lf_table, "jobs");
+    if (deleted_jobs != NULL) {
+        printf("Deleted jobs: %d\n", *deleted_jobs);
+        free(deleted_jobs);
+        lf_jobs = NULL;
+    }
+
+    printf("After delete: length=%zu, jobs=%p\n",
+           lf_hash_table_length(lf_table),
+           lf_hash_table_get(lf_table, "jobs"));
+
+    lf_jobs = make_int(256);
+
+    // Повторная вставка того же key оживляет логически удаленную запись.
+    if (!lf_hash_table_set(lf_table, "jobs", lf_jobs)) {
+        free(lf_jobs);
+        exit_nomem();
+    }
+
+    printf("Reactivated jobs: %d\n",
+           *(int*)lf_hash_table_get(lf_table, "jobs"));
+    printf("Final lock-free table length: %zu\n",
+           lf_hash_table_length(lf_table));
+
+    lf_hash_table_destroy(lf_table);
+    free(lf_workers);
+    free(lf_jobs);
 
     return 0;
 }
